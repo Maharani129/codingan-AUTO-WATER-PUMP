@@ -1,0 +1,98 @@
+import RPi.GPIO as GPIO
+import time
+from hcsr04sensor import sensor
+from gpiozero import MCP3008
+import requests
+
+# GPIO pins for ultrasonic sensor
+TRIG_PIN = 23
+ECHO_PIN = 24
+
+# GPIO pins for water flow sensor
+FLOW_SENSOR_PIN = 17
+
+# Initialize ultrasonic sensor
+ultrasonic = sensor.Measurement(TRIG_PIN, ECHO_PIN)
+
+# Initialize MCP3008 for turbidity sensor
+adc = MCP3008(channel=0)  # Use appropriate channel based on wiring
+
+# Initialize water flow sensor
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(FLOW_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+flow_count = 0
+
+# URLs for sending data to the database
+WATER_LEVEL_URL = "https://gpstracklimbungan.site/MAN4/smart_waterpump/waterpump.php?level="
+FLOW_METER_URL = "https://gpstracklimbungan.site/MAN4/smart_waterpump/waterpump.php?flow="
+WATER_QUALITY_URL = "https://gpstracklimbungan.site/MAN4/smart_waterpump/waterpump.php?water="
+
+def send_water_level(level):
+    url = WATER_LEVEL_URL + str(level)
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            print("Water level data sent successfully.")
+        else:
+            print("Error sending water level data. Status Code:", response.status_code)
+    except requests.exceptions.RequestException as e:
+        print("Error sending water level data:", e)
+
+def send_flow_rate(flow_rate):
+    url = FLOW_METER_URL + str(flow_rate)
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            print("Flow rate data sent successfully.")
+        else:
+            print("Error sending flow rate data. Status Code:", response.status_code)
+    except requests.exceptions.RequestException as e:
+        print("Error sending flow rate data:", e)
+
+def send_water_quality(quality_level):
+    url = WATER_QUALITY_URL + str(quality_level)
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            print("Water quality data sent successfully.")
+        else:
+            print("Error sending water quality data. Status Code:", response.status_code)
+    except requests.exceptions.RequestException as e:
+        print("Error sending water quality data:", e)
+
+def flow_callback(channel):
+    global flow_count
+    flow_count += 1
+
+GPIO.add_event_detect(FLOW_SENSOR_PIN, GPIO.FALLING, callback=flow_callback)
+
+try:
+    while True:
+        # Read ultrasonic sensor data
+        distance = ultrasonic.raw_distance()
+        print("Water level:", distance, "mm")
+
+        # Read turbidity sensor data
+        turbidity_value = adc.value * 100  # Convert to percentage
+        print("Turbidity:", turbidity_value, "%")
+
+        # Read water flow sensor data
+        flow_rate = flow_count / 5.5  # Calculate flow rate (adjust the constant based on your sensor)
+        flow_count = 0
+        print("Flow rate:", flow_rate, "L/min")
+
+        # Simulated water quality value (replace with actual reading)
+        water_quality = 75
+        print("Water quality:", water_quality)
+
+        try:
+            send_water_level(distance)
+            send_flow_rate(flow_rate)
+            send_water_quality(water_quality)
+        except Exception as e:
+            print("Error sending data:", e)
+
+        time.sleep(1)
+
+except KeyboardInterrupt:
+    GPIO.cleanup()
